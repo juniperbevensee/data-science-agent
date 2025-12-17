@@ -10,18 +10,31 @@ logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 # NLTK imports and downloads
 import nltk
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt', quiet=True)
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('stopwords', quiet=True)
-try:
-    nltk.data.find('taggers/averaged_perceptron_tagger')
-except LookupError:
-    nltk.download('averaged_perceptron_tagger', quiet=True)
+import ssl
+
+def _download_nltk_data():
+    """Download required NLTK data with SSL fallback."""
+    required = [
+        ('tokenizers/punkt', 'punkt'),
+        ('corpora/stopwords', 'stopwords'),
+        ('taggers/averaged_perceptron_tagger', 'averaged_perceptron_tagger')
+    ]
+
+    for path, name in required:
+        try:
+            nltk.data.find(path)
+        except LookupError:
+            try:
+                nltk.download(name, quiet=True)
+            except Exception:
+                # Fallback: disable SSL verification
+                try:
+                    ssl._create_default_https_context = ssl._create_unverified_context
+                    nltk.download(name, quiet=True)
+                except Exception as e:
+                    logging.warning(f"Could not download NLTK data '{name}': {e}")
+
+_download_nltk_data()
 
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.corpus import stopwords

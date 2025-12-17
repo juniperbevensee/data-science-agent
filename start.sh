@@ -47,6 +47,59 @@ pip install -r requirements.txt --quiet
 
 echo "✓ All dependencies installed"
 
+# Download NLTK data with SSL fallback
+echo "Checking NLTK data..."
+python3 << 'PYTHON_SCRIPT'
+import sys
+import ssl
+import nltk
+
+required_data = ['punkt', 'stopwords', 'averaged_perceptron_tagger']
+missing_data = []
+
+# Check what's missing
+for dataset in required_data:
+    try:
+        if dataset == 'averaged_perceptron_tagger':
+            nltk.data.find('taggers/averaged_perceptron_tagger')
+        elif dataset == 'punkt':
+            nltk.data.find('tokenizers/punkt')
+        else:
+            nltk.data.find(f'corpora/{dataset}')
+    except LookupError:
+        missing_data.append(dataset)
+
+if not missing_data:
+    print("✓ All NLTK data is already downloaded")
+    sys.exit(0)
+
+print(f"Downloading NLTK data: {', '.join(missing_data)}...")
+
+# Try with SSL verification first
+success = True
+for dataset in missing_data:
+    try:
+        nltk.download(dataset, quiet=True)
+    except Exception as e:
+        success = False
+        break
+
+# If that failed, try without SSL verification
+if not success:
+    print("  (Using fallback SSL method due to certificate issues...)")
+    try:
+        ssl._create_default_https_context = ssl._create_unverified_context
+        for dataset in missing_data:
+            nltk.download(dataset, quiet=True)
+        print("✓ NLTK data downloaded successfully")
+    except Exception as e:
+        print(f"⚠ Warning: Could not download NLTK data: {e}")
+        print("  Text analysis features may not work properly")
+        sys.exit(0)
+else:
+    print("✓ NLTK data downloaded successfully")
+PYTHON_SCRIPT
+
 # Check if LM Studio is running (optional warning)
 echo ""
 echo "Checking configuration..."
