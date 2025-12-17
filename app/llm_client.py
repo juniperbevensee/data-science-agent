@@ -128,16 +128,41 @@ def _chat_bedrock(messages: list[dict], tools: list[dict] = None) -> dict:
     else:
         client = boto3.client("bedrock-runtime", region_name=config.AWS_REGION)
     
-    # Extract system message
+    # Extract system message and convert messages to Bedrock format
     system = []
     bedrock_messages = []
     for msg in messages:
         if msg["role"] == "system":
             system.append({"text": msg["content"]})
+        elif msg["role"] == "tool":
+            # Bedrock expects tool results as user messages with toolResult content
+            bedrock_messages.append({
+                "role": "user",
+                "content": [{
+                    "toolResult": {
+                        "toolUseId": msg.get("tool_call_id", "unknown"),
+                        "content": [{"text": msg["content"]}]
+                    }
+                }]
+            })
+        elif msg["role"] == "assistant" and msg.get("tool_calls"):
+            # Assistant message with tool calls
+            content = []
+            if msg.get("content"):
+                content.append({"text": msg["content"]})
+            for tc in msg["tool_calls"]:
+                content.append({
+                    "toolUse": {
+                        "toolUseId": tc["id"],
+                        "name": tc["function"]["name"],
+                        "input": json.loads(tc["function"]["arguments"])
+                    }
+                })
+            bedrock_messages.append({"role": "assistant", "content": content})
         else:
             bedrock_messages.append({
                 "role": msg["role"],
-                "content": [{"text": msg["content"]}]
+                "content": [{"text": msg.get("content", "") or ""}]
             })
     
     params = {
