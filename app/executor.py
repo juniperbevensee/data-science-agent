@@ -1,0 +1,96 @@
+import json
+from app.llm_client import chat, get_response_content, get_tool_calls
+from app.tools import TOOLS, TOOL_SCHEMAS
+from app.sandbox import SandboxError
+
+SYSTEM_PROMPT = """You are a data science assistant with access to tools for file operations and data analysis.
+You work within a sandboxed workspace directory. All file paths are relative to this workspace.
+
+When the user asks you to perform data tasks, use the available tools. Always explain what you're doing.
+If a task requires multiple steps, execute them one at a time."""
+
+MAX_ITERATIONS = 10
+
+
+def execute_tool(name: str, arguments: dict) -> dict:
+    """Execute a tool by name with given arguments."""
+    if name not in TOOLS:
+        return {"error": f"Unknown tool: {name}"}
+    
+    try:
+        return TOOLS[name](**arguments)
+    except SandboxError as e:
+        return {"error": f"Sandbox violation: {e}"}
+    except Exception as e:
+        return {"error": f"Tool error: {e}"}
+
+
+def run_agent(user_message: str) -> dict:
+    """
+    Run the agent loop: LLM decides tools → execute → return results → repeat.
+    
+    Returns dict with 'response' (final text) and 'tool_results' (list of tool executions).
+    """
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_message}
+    ]
+    
+    all_tool_results = []
+    
+    for _ in range(MAX_ITERATIONS):
+        # Call LLM
+        response = chat(messages, tools=TOOL_SCHEMAS)
+        assistant_message = response["choices"][0]["message"]
+        
+        # Check for tool calls
+        tool_calls = assistant_message.get("tool_calls", [])
+        
+        if not tool_calls:
+            # No tools called, we're done
+            return {
+                "response": assistant_message.get("content", ""),
+                "tool_results": all_tool_results
+            }
+        
+        # Add assistant message with tool calls to history
+        messages.append(assistant_message)
+        
+        # Execute each tool call
+        for tool_call in tool_calls:
+            func_name = tool_call["function"]["name"]
+            func_args = json.loads(tool_call["function"]["arguments"])
+            
+            result = execute_tool(func_name, func_args)
+            all_tool_results.append({
+                "tool": func_name,
+                "arguments": func_args,
+                "result": result
+            })
+            
+            # Add tool result to messages
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call["id"],
+                "content": json.dumps(result)
+            })
+    
+    # Max iterations reached
+    return {
+        "response": "Max iterations reached. Task may be incomplete.",
+        "tool_results": all_tool_results
+    }
+
+
+# Test
+if __name__ == "__main__":
+    print("Testing agent loop...")
+    print("Query: List the files in the workspace")
+    
+    result = run_agent("List the files in the workspace")
+    
+    print(f"\nResponse: {result['response']}")
+    print(f"\nTool calls: {len(result['tool_results'])}")
+    for tr in result['tool_results']:
+        print(f"  - {tr['tool']}: {tr['result']}")
+
