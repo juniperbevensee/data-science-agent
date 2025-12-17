@@ -111,14 +111,20 @@ def _chat_bedrock(messages: list[dict], tools: list[dict] = None) -> dict:
     import boto3
     import json
     
-    # Use explicit credentials if provided, otherwise fall back to default chain
+    # Priority: explicit credentials > named profile > default chain
     if config.AWS_ACCESS_KEY_ID and config.AWS_SECRET_ACCESS_KEY:
-        client = boto3.client(
-            "bedrock-runtime",
-            region_name=config.AWS_REGION,
-            aws_access_key_id=config.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY
-        )
+        client_kwargs = {
+            "service_name": "bedrock-runtime",
+            "region_name": config.AWS_REGION,
+            "aws_access_key_id": config.AWS_ACCESS_KEY_ID,
+            "aws_secret_access_key": config.AWS_SECRET_ACCESS_KEY,
+        }
+        if config.AWS_SESSION_TOKEN:
+            client_kwargs["aws_session_token"] = config.AWS_SESSION_TOKEN
+        client = boto3.client(**client_kwargs)
+    elif config.AWS_PROFILE:
+        session = boto3.Session(profile_name=config.AWS_PROFILE)
+        client = session.client("bedrock-runtime", region_name=config.AWS_REGION)
     else:
         client = boto3.client("bedrock-runtime", region_name=config.AWS_REGION)
     

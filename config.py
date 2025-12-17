@@ -19,6 +19,8 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 AWS_REGION = os.getenv("AWS_REGION", "us-west-1")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+AWS_SESSION_TOKEN = os.getenv("AWS_SESSION_TOKEN", "")  # Required for SSO/temporary credentials
+AWS_PROFILE = os.getenv("AWS_PROFILE", "")  # Use named profile instead of explicit keys
 
 # Sandboxed workspace directory
 WORKSPACE_DIR = "workspace"
