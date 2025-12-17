@@ -5,8 +5,15 @@ import numpy as np
 from collections import Counter
 from app.sandbox import resolve_path
 
-# Suppress verbose logging
+# Suppress verbose logging from matplotlib and other libraries
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
+logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
+logging.getLogger('PIL').setLevel(logging.WARNING)
+
+# Set matplotlib to non-interactive backend and config before any other matplotlib imports
+import matplotlib
+matplotlib.use('Agg')
+os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'  # Avoid creating .matplotlib in home dir
 
 # NLTK imports and downloads
 import nltk
@@ -14,6 +21,9 @@ import ssl
 
 def _download_nltk_data():
     """Download required NLTK data with SSL fallback."""
+    import sys
+    import io
+
     required = [
         ('tokenizers/punkt', 'punkt'),
         ('corpora/stopwords', 'stopwords'),
@@ -24,15 +34,26 @@ def _download_nltk_data():
         try:
             nltk.data.find(path)
         except LookupError:
+            # Suppress stderr to hide SSL error messages during fallback
+            old_stderr = sys.stderr
+            sys.stderr = io.StringIO()
+
             try:
+                # Try with SSL verification first
                 nltk.download(name, quiet=True)
             except Exception:
-                # Fallback: disable SSL verification
+                # Fallback: disable SSL verification (common on macOS)
                 try:
                     ssl._create_default_https_context = ssl._create_unverified_context
                     nltk.download(name, quiet=True)
                 except Exception as e:
+                    # Restore stderr before logging
+                    sys.stderr = old_stderr
                     logging.warning(f"Could not download NLTK data '{name}': {e}")
+                    continue
+            finally:
+                # Always restore stderr
+                sys.stderr = old_stderr
 
 _download_nltk_data()
 
@@ -45,8 +66,6 @@ from textblob import TextBlob
 
 # Wordcloud
 from wordcloud import WordCloud
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # Scikit-learn for topic modeling
