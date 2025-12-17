@@ -30,3 +30,7 @@ FLASK_HOST = "0.0.0.0"
 FLASK_PORT = 5000
 FLASK_DEBUG = True
 
+# AWS/Botocore logging control (defaults to suppressed)
+# Set to False to see botocore DEBUG logs
+SUPPRESS_AWS_LOGGING = True
+

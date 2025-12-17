@@ -22,6 +22,20 @@ os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
 from app import create_app
 import config
 
+# Suppress AWS/botocore logging if configured (defaults to suppressed)
+if getattr(config, 'SUPPRESS_AWS_LOGGING', True):
+    logging.getLogger('boto3').setLevel(logging.WARNING)
+    logging.getLogger('botocore').setLevel(logging.WARNING)
+    logging.getLogger('botocore.hooks').setLevel(logging.WARNING)
+    logging.getLogger('botocore.credentials').setLevel(logging.WARNING)
+    logging.getLogger('botocore.loaders').setLevel(logging.WARNING)
+    logging.getLogger('botocore.endpoint').setLevel(logging.WARNING)
+    logging.getLogger('botocore.client').setLevel(logging.WARNING)
+    logging.getLogger('botocore.regions').setLevel(logging.WARNING)
+    logging.getLogger('botocore.session').setLevel(logging.WARNING)
+    logging.getLogger('botocore.utils').setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+
 app = create_app()
 
 if __name__ == '__main__':
