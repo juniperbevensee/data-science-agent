@@ -52,7 +52,7 @@ def read_json(path: str) -> dict:
             "count": len(data),
             "keys": keys,
             "sample": data[:sample_size],
-            "message": f"Loaded JSON array with {len(data)} items. Consider converting to CSV for analysis using write_csv, then use analytics tools."
+            "message": f"Loaded JSON array with {len(data)} items. Use convert_json_to_csv to convert the FULL file to CSV, then use analytics tools."
         }
     elif is_object:
         # Object - return structure info
@@ -90,6 +90,71 @@ def write_json(path: str, data) -> dict:
     with open(full_path, 'w') as f:
         json.dump(data, f, indent=2)
     return {"success": True, "path": path}
+
+
+def convert_json_to_csv(
+    json_path: str,
+    csv_path: str,
+    extract_path: str = None
+) -> dict:
+    """
+    Convert FULL JSON file to CSV format. Handles arrays and nested objects.
+
+    Use this instead of write_csv when you need to convert a JSON file to CSV.
+    This loads and converts the ENTIRE JSON file, not just a sample.
+
+    Args:
+        json_path: Path to input JSON file
+        csv_path: Path for output CSV file
+        extract_path: Optional dot-notation path to extract nested data (e.g. "results")
+    """
+    full_json_path = resolve_path(json_path)
+
+    with open(full_json_path, 'r') as f:
+        data = json.load(f)
+
+    # Extract nested data if path provided
+    if extract_path:
+        parts = extract_path.split('.')
+        for part in parts:
+            if isinstance(data, dict):
+                data = data.get(part, [])
+            elif isinstance(data, list) and part.isdigit():
+                data = data[int(part)]
+            else:
+                return {"success": False, "error": f"Cannot extract '{part}' from {type(data).__name__}"}
+
+    # Convert to DataFrame
+    if isinstance(data, list):
+        if len(data) == 0:
+            return {"success": False, "error": "Empty data array"}
+
+        if isinstance(data[0], dict):
+            # List of objects - flatten nested structures
+            df = pd.json_normalize(data)
+        else:
+            # List of primitives
+            df = pd.DataFrame({'value': data})
+    elif isinstance(data, dict):
+        # Single object or nested object - normalize it
+        df = pd.json_normalize([data])
+    else:
+        return {"success": False, "error": f"Cannot convert {type(data).__name__} to CSV"}
+
+    # Write to CSV
+    full_csv_path = resolve_path(csv_path)
+    os.makedirs(os.path.dirname(full_csv_path), exist_ok=True) if os.path.dirname(full_csv_path) else None
+    df.to_csv(full_csv_path, index=False)
+
+    return {
+        "success": True,
+        "input": json_path,
+        "output": csv_path,
+        "rows": len(df),
+        "columns": list(df.columns)[:10],  # Show first 10 columns
+        "total_columns": len(df.columns),
+        "message": f"Converted {len(df)} rows to CSV. Use analytics tools to analyze this data."
+    }
 
 
 def copy_file(src: str, dst: str) -> dict:
@@ -143,7 +208,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "read_json",
-            "description": "Get JSON file metadata and small sample. Returns structure info and sample only. For analysis, convert to CSV first using write_csv, then use analytics tools.",
+            "description": "Get JSON file metadata and small sample. Returns structure info and sample only. To analyze JSON data, use convert_json_to_csv to convert the FULL file to CSV first.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -180,6 +245,22 @@ TOOL_SCHEMAS = [
                     "data": {"description": "Data to write"}
                 },
                 "required": ["path", "data"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "convert_json_to_csv",
+            "description": "Convert FULL JSON file to CSV. Use this to load and convert entire JSON files for analysis. Handles nested objects and arrays. This loads ALL data, not just a sample.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "json_path": {"type": "string", "description": "Path to input JSON file"},
+                    "csv_path": {"type": "string", "description": "Path for output CSV file"},
+                    "extract_path": {"type": "string", "description": "Optional dot-notation path to extract nested data (e.g. 'results' or 'data.items')"}
+                },
+                "required": ["json_path", "csv_path"]
             }
         }
     },
@@ -233,6 +314,7 @@ TOOLS = {
     "read_json": read_json,
     "write_csv": write_csv,
     "write_json": write_json,
+    "convert_json_to_csv": convert_json_to_csv,
     "copy_file": copy_file,
     "list_files": list_files,
     "file_info": file_info,
