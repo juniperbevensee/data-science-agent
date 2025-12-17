@@ -93,10 +93,37 @@ def rename_columns(path: str, mapping: dict, output_path: str = None) -> dict:
     return {"success": True, "columns": list(df.columns), "data": df.to_dict(orient="records")}
 
 
-def add_column(path: str, name: str, expression: str, output_path: str = None) -> dict:
-    """Add a computed column using a pandas expression."""
+def add_column(path: str, name: str, expression: str = None, source_column: str = None, 
+               transform: str = None, pattern: str = None, replacement: str = "", 
+               output_path: str = None) -> dict:
+    """
+    Add a computed column.
+    - expression: pandas eval expression for arithmetic (e.g. 'price * quantity')
+    - source_column + transform: apply a transform to a column
+      transforms: 'regex_replace', 'lower', 'upper', 'strip', 'extract'
+    - pattern/replacement: for regex operations
+    """
+    import re
     df = pd.read_csv(resolve_path(path))
-    df[name] = df.eval(expression)
+    
+    if expression:
+        df[name] = df.eval(expression)
+    elif source_column and transform:
+        col = df[source_column].astype(str)
+        if transform == "regex_replace":
+            df[name] = col.str.replace(pattern, replacement, regex=True)
+        elif transform == "extract":
+            df[name] = col.str.extract(pattern, expand=False)
+        elif transform == "lower":
+            df[name] = col.str.lower()
+        elif transform == "upper":
+            df[name] = col.str.upper()
+        elif transform == "strip":
+            df[name] = col.str.strip()
+        else:
+            return {"success": False, "error": f"Unknown transform: {transform}"}
+    else:
+        return {"success": False, "error": "Provide either 'expression' or 'source_column' + 'transform'"}
     
     if output_path:
         df.to_csv(resolve_path(output_path), index=False)
@@ -193,16 +220,20 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "add_column",
-            "description": "Add a computed column using a pandas expression",
+            "description": "Add a computed column. Use 'expression' for arithmetic (e.g. 'price * quantity'), or use 'source_column' + 'transform' for string operations like regex_replace, lower, upper, strip, extract.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {"type": "string"},
                     "name": {"type": "string", "description": "New column name"},
-                    "expression": {"type": "string", "description": "Pandas eval expression, e.g. 'price * quantity'"},
+                    "expression": {"type": "string", "description": "Pandas eval expression for arithmetic"},
+                    "source_column": {"type": "string", "description": "Column to transform"},
+                    "transform": {"type": "string", "enum": ["regex_replace", "extract", "lower", "upper", "strip"]},
+                    "pattern": {"type": "string", "description": "Regex pattern for regex_replace or extract"},
+                    "replacement": {"type": "string", "description": "Replacement string for regex_replace"},
                     "output_path": {"type": "string"}
                 },
-                "required": ["path", "name", "expression"]
+                "required": ["path", "name"]
             }
         }
     }
