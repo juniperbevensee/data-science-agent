@@ -28,6 +28,14 @@ All visualizations are saved as high-resolution PNGs (300 DPI) in the workspace 
 - **K-means clustering** - Unsupervised learning with customizable clusters
 - **Train/test splitting** - Prepare data for machine learning
 
+### 📝 Text Analysis
+Comprehensive qualitative data analysis tools:
+- **Text preprocessing** - Tokenization, stopword removal, lemmatization
+- **Word frequency analysis** - Most common words/phrases with visualizations
+- **Sentiment analysis** - Polarity scores and positive/negative/neutral classification
+- **Word clouds** - Visual representation of text data
+- **Topic modeling** - Discover themes using LDA (Latent Dirichlet Allocation)
+
 ### 🔧 Data Transformation
 - Filter, sort, and select data
 - Create new calculated columns
@@ -119,6 +127,13 @@ curl -X POST http://localhost:5000/query \
 - "Show me value counts for the category column"
 - "Fit a linear regression predicting price from size and bedrooms"
 - "Cluster the data into 5 groups based on features X, Y, Z"
+
+**Text Analysis:**
+- "Analyze sentiment in customer_reviews.csv and save the results"
+- "Create a word cloud from the feedback column in survey.csv"
+- "What are the most frequent words in the comments column?"
+- "Extract 5 topics from the documents in articles.csv"
+- "Preprocess the text in tweets.csv and remove stopwords"
 
 **Data Operations:**
 - "Read the CSV file data.csv and show me the first 10 rows"
