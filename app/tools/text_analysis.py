@@ -36,9 +36,9 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-# Gensim for topic modeling
-from gensim import corpora
-from gensim.models import LdaModel
+# Scikit-learn for topic modeling
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.decomposition import LatentDirichletAllocation
 
 
 def _get_unique_filename(base_path: str) -> str:
@@ -318,47 +318,58 @@ def topic_extraction(
     if column not in df.columns:
         return {"success": False, "error": f"Column '{column}' not found"}
 
-    # Preprocess texts
-    stop_words = set(stopwords.words('english'))
-
-    def preprocess(text):
-        if pd.isna(text):
-            return []
-        tokens = word_tokenize(str(text).lower())
-        tokens = [t for t in tokens if t.isalnum() and t not in stop_words and len(t) > 2]
-        return tokens
-
-    texts = df[column].apply(preprocess).tolist()
-    texts = [t for t in texts if t]  # Remove empty documents
+    # Get text data
+    texts = df[column].dropna().astype(str).tolist()
 
     if len(texts) < num_topics:
         return {"success": False, "error": f"Not enough documents. Need at least {num_topics}, got {len(texts)}"}
 
-    # Create dictionary and corpus
-    dictionary = corpora.Dictionary(texts)
-    corpus = [dictionary.doc2bow(text) for text in texts]
-
-    # Train LDA model
-    lda_model = LdaModel(
-        corpus=corpus,
-        id2word=dictionary,
-        num_topics=num_topics,
-        random_state=42,
-        passes=10,
-        alpha='auto'
+    # Create document-term matrix using CountVectorizer
+    vectorizer = CountVectorizer(
+        max_df=0.95,
+        min_df=2,
+        stop_words='english',
+        token_pattern=r'\b[a-zA-Z]{3,}\b'  # Only words with 3+ letters
     )
 
+    try:
+        doc_term_matrix = vectorizer.fit_transform(texts)
+    except ValueError as e:
+        return {"success": False, "error": f"Unable to create document-term matrix: {str(e)}"}
+
+    # Train LDA model
+    lda_model = LatentDirichletAllocation(
+        n_components=num_topics,
+        random_state=42,
+        max_iter=10,
+        learning_method='online',
+        n_jobs=-1
+    )
+
+    lda_model.fit(doc_term_matrix)
+
     # Extract topics
+    feature_names = vectorizer.get_feature_names_out()
     topics = {}
-    for idx in range(num_topics):
-        topic_words = lda_model.show_topic(idx, num_words)
-        topics[f"topic_{idx+1}"] = [{"word": word, "weight": round(weight, 4)} for word, weight in topic_words]
+
+    for topic_idx, topic in enumerate(lda_model.components_):
+        # Get top words for this topic
+        top_indices = topic.argsort()[-num_words:][::-1]
+        top_words = [(feature_names[i], topic[i]) for i in top_indices]
+
+        # Normalize weights to sum to 1 for better interpretability
+        total_weight = sum(weight for _, weight in top_words)
+        topics[f"topic_{topic_idx+1}"] = [
+            {"word": word, "weight": round(weight/total_weight, 4)}
+            for word, weight in top_words
+        ]
 
     result = {
         "success": True,
         "num_topics": num_topics,
         "topics": topics,
-        "num_documents": len(texts)
+        "num_documents": len(texts),
+        "vocabulary_size": len(feature_names)
     }
 
     # Save to file if requested
