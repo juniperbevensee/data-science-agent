@@ -1,5 +1,8 @@
 # Configuration settings
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # LLM Provider: "local", "openai", "anthropic"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "local")
