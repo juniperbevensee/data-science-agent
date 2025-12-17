@@ -111,7 +111,16 @@ def _chat_bedrock(messages: list[dict], tools: list[dict] = None) -> dict:
     import boto3
     import json
     
-    client = boto3.client("bedrock-runtime", region_name=config.AWS_REGION)
+    # Use explicit credentials if provided, otherwise fall back to default chain
+    if config.AWS_ACCESS_KEY_ID and config.AWS_SECRET_ACCESS_KEY:
+        client = boto3.client(
+            "bedrock-runtime",
+            region_name=config.AWS_REGION,
+            aws_access_key_id=config.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY
+        )
+    else:
+        client = boto3.client("bedrock-runtime", region_name=config.AWS_REGION)
     
     # Extract system message
     system = []
