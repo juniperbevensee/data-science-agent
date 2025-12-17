@@ -52,7 +52,7 @@ All visualizations are saved as high-resolution PNGs (300 DPI) in the workspace 
 - Python 3.8 or higher
 - LM Studio (or OpenAI-compatible API server)
 
-### Setup
+### Quick Start
 
 1. Clone the repository:
 ```bash
@@ -60,23 +60,37 @@ git clone <repository-url>
 cd data-science-agent
 ```
 
-2. Install dependencies:
+2. Start the server (recommended):
+```bash
+./start.sh
+```
+
+The `start.sh` script will automatically:
+- Create a virtual environment
+- Install all dependencies from requirements.txt
+- Create the workspace directory
+- Check if LM Studio is running
+- Start the Flask server on `http://0.0.0.0:5000`
+
+### Manual Setup
+
+If you prefer to set up manually:
+
+1. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Configure the LLM backend in `config.py`:
+2. Configure the LLM backend in `config.py` (if needed):
 ```python
 LLM_BASE_URL = "http://localhost:1234/v1"  # Your LM Studio URL
 LLM_MODEL = "local-model"
 ```
 
-4. Run the server:
+3. Run the server:
 ```bash
 python run.py
 ```
-
-The server will start on `http://0.0.0.0:5000`
 
 ## Usage
 
