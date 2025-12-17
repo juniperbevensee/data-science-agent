@@ -6,23 +6,72 @@ from app.sandbox import resolve_path, list_files as sandbox_list_files, WORKSPAC
 
 
 def read_csv(path: str, **kwargs) -> dict:
-    """Read a CSV file and return its contents."""
+    """
+    Read CSV file metadata and sample. Returns summary info, NOT full data.
+    Use analytics tools (summary_stats, value_counts, etc.) to analyze the data.
+    """
     full_path = resolve_path(path)
     df = pd.read_csv(full_path, **kwargs)
+
+    # Return only metadata and a small sample
     return {
         "success": True,
-        "data": df.to_dict(orient="records"),
+        "path": path,
+        "rows": len(df),
         "columns": list(df.columns),
-        "rows": len(df)
+        "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
+        "sample": df.head(5).to_dict(orient="records"),
+        "message": f"Loaded CSV with {len(df)} rows and {len(df.columns)} columns. Use analytics tools to analyze this data."
     }
 
 
 def read_json(path: str) -> dict:
-    """Read a JSON file."""
+    """
+    Read JSON file metadata and sample. Returns summary info, NOT full data.
+    For large files, convert to CSV first then use analytics tools.
+    """
     full_path = resolve_path(path)
     with open(full_path, 'r') as f:
         data = json.load(f)
-    return {"success": True, "data": data}
+
+    # Determine structure
+    is_array = isinstance(data, list)
+    is_object = isinstance(data, dict)
+
+    if is_array:
+        # Array of objects - return metadata and sample
+        sample_size = min(5, len(data))
+
+        # Get keys from first object if available
+        keys = list(data[0].keys()) if len(data) > 0 and isinstance(data[0], dict) else []
+
+        return {
+            "success": True,
+            "path": path,
+            "type": "array",
+            "count": len(data),
+            "keys": keys,
+            "sample": data[:sample_size],
+            "message": f"Loaded JSON array with {len(data)} items. Consider converting to CSV for analysis using write_csv, then use analytics tools."
+        }
+    elif is_object:
+        # Object - return structure info
+        return {
+            "success": True,
+            "path": path,
+            "type": "object",
+            "keys": list(data.keys()),
+            "sample": {k: (v[:3] if isinstance(v, list) else v) for k, v in list(data.items())[:10]},
+            "message": "Loaded JSON object. Extract relevant data and convert to CSV for analysis."
+        }
+    else:
+        # Primitive type
+        return {
+            "success": True,
+            "path": path,
+            "type": type(data).__name__,
+            "data": data
+        }
 
 
 def write_csv(path: str, data: list[dict], **kwargs) -> dict:
@@ -80,7 +129,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "read_csv",
-            "description": "Read a CSV file from the workspace",
+            "description": "Get CSV file metadata and small sample (5 rows). Returns row count, columns, data types, and sample. Does NOT return full data - use analytics tools for analysis.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -94,7 +143,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "read_json",
-            "description": "Read a JSON file from the workspace",
+            "description": "Get JSON file metadata and small sample. Returns structure info and sample only. For analysis, convert to CSV first using write_csv, then use analytics tools.",
             "parameters": {
                 "type": "object",
                 "properties": {
