@@ -75,12 +75,16 @@ def query():
     from app.executor import run_agent
     import time
     try:
+        current_app.logger.info("=" * 60)
+        current_app.logger.info("🚀 AGENT REQUEST")
+        current_app.logger.info("=" * 60)
+
         result = run_agent(extracted_message)
-        current_app.logger.info(f"Agent response: {result['response'][:200]}...")
-        current_app.logger.debug(f"Tool calls: {len(result['tool_results'])}")
-        for tr in result['tool_results']:
-            current_app.logger.debug(f"  Tool: {tr['tool']} -> {json.dumps(tr['result'])[:100]}")
-        
+
+        current_app.logger.info("=" * 60)
+        current_app.logger.info(f"✅ AGENT COMPLETE - {len(result['tool_results'])} tool(s) executed")
+        current_app.logger.info("=" * 60)
+
         # Return OpenAI-compatible format
         return jsonify({
             "id": f"chatcmpl-{int(time.time())}",

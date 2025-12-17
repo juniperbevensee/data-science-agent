@@ -23,68 +23,100 @@ MAX_ITERATIONS = 10
 
 def execute_tool(name: str, arguments: dict) -> dict:
     """Execute a tool by name with given arguments."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     if name not in TOOLS:
         return {"error": f"Unknown tool: {name}"}
-    
+
+    # Log tool execution
+    logger.info(f"🔧 Executing tool: {name}")
+    logger.info(f"   Arguments: {json.dumps(arguments, indent=2)}")
+
     try:
-        return TOOLS[name](**arguments)
+        result = TOOLS[name](**arguments)
+
+        # Log result (truncate if too long)
+        result_str = json.dumps(result, indent=2)
+        if len(result_str) > 500:
+            logger.info(f"   Result: {result_str[:500]}... (truncated)")
+        else:
+            logger.info(f"   Result: {result_str}")
+
+        return result
     except SandboxError as e:
-        return {"error": f"Sandbox violation: {e}"}
+        error_result = {"error": f"Sandbox violation: {e}"}
+        logger.error(f"   ❌ Sandbox error: {e}")
+        return error_result
     except Exception as e:
-        return {"error": f"Tool error: {e}"}
+        error_result = {"error": f"Tool error: {e}"}
+        logger.error(f"   ❌ Tool error: {e}", exc_info=True)
+        return error_result
 
 
 def run_agent(user_message: str) -> dict:
     """
     Run the agent loop: LLM decides tools → execute → return results → repeat.
-    
+
     Returns dict with 'response' (final text) and 'tool_results' (list of tool executions).
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"🤖 Starting agent for query: {user_message[:100]}...")
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_message}
     ]
-    
+
     all_tool_results = []
-    
-    for _ in range(MAX_ITERATIONS):
+
+    for iteration in range(MAX_ITERATIONS):
+        logger.info(f"📍 Iteration {iteration + 1}/{MAX_ITERATIONS}")
+
         # Call LLM
         response = chat(messages, tools=TOOL_SCHEMAS)
         assistant_message = response["choices"][0]["message"]
-        
+
         # Check for tool calls
         tool_calls = assistant_message.get("tool_calls", [])
-        
+
         if not tool_calls:
             # No tools called, we're done
+            final_response = assistant_message.get("content", "")
+            logger.info(f"✅ Agent finished. Response: {final_response[:200]}...")
             return {
-                "response": assistant_message.get("content", ""),
+                "response": final_response,
                 "tool_results": all_tool_results
             }
-        
+
+        logger.info(f"🔨 LLM requested {len(tool_calls)} tool call(s)")
+
         # Add assistant message with tool calls to history
         messages.append(assistant_message)
-        
+
         # Execute each tool call
         for tool_call in tool_calls:
             func_name = tool_call["function"]["name"]
             func_args = json.loads(tool_call["function"]["arguments"])
-            
+
             result = execute_tool(func_name, func_args)
             all_tool_results.append({
                 "tool": func_name,
                 "arguments": func_args,
                 "result": result
             })
-            
+
             # Add tool result to messages
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call["id"],
                 "content": json.dumps(result)
             })
-    
+
     # Max iterations reached
+    logger.warning("⚠️  Max iterations reached. Task may be incomplete.")
     return {
         "response": "Max iterations reached. Task may be incomplete.",
         "tool_results": all_tool_results
