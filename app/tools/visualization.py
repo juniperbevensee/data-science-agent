@@ -1,8 +1,14 @@
 import os
+import logging
 import pandas as pd
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend
+
+# Suppress matplotlib's verbose font logging
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
+logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 from app.sandbox import resolve_path
