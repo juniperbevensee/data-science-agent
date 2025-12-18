@@ -26,7 +26,7 @@ CRITICAL RULES:
 When the user asks you to perform data tasks, use the available tools. Always explain what you're doing.
 If a task requires multiple steps, execute them one at a time."""
 
-MAX_ITERATIONS = 10
+MAX_ITERATIONS = 15  # Increased from 10 to allow for complex multi-step tasks
 
 
 def execute_tool(name: str, arguments: dict) -> dict:
