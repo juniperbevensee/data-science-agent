@@ -153,6 +153,21 @@ def query():
     if parsed_messages:
         current_app.logger.info(f"📝 Parsed {len(parsed_messages)} individual messages from conversation history")
 
+    # IMPORTANT: Only send the LATEST user message to avoid re-executing historical tasks
+    # The full conversation history is just context - we don't want to repeat old work
+    latest_user_message = None
+    if parsed_messages:
+        # Find the last user message (most recent request)
+        for msg in reversed(parsed_messages):
+            if msg["role"] == "user":
+                latest_user_message = msg["content"]
+                current_app.logger.info(f"💬 Latest user request: {latest_user_message[:200]}...")
+                break
+
+    # If no parsed latest message, use the extracted message
+    if not latest_user_message:
+        latest_user_message = extracted_message
+
     # Run the agent
     from app.executor import run_agent
     import time
@@ -161,8 +176,9 @@ def query():
         current_app.logger.info("🚀 AGENT REQUEST")
         current_app.logger.info("=" * 60)
 
-        # Pass both the formatted string and parsed messages
-        result = run_agent(extracted_message, conversation_history=parsed_messages)
+        # Pass ONLY the latest user message (not full conversation history)
+        # This prevents the agent from re-executing tasks from previous sessions
+        result = run_agent(latest_user_message, conversation_history=None)
 
         current_app.logger.info("=" * 60)
         current_app.logger.info(f"✅ AGENT COMPLETE - {len(result['tool_results'])} tool(s) executed")
