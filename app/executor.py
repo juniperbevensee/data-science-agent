@@ -62,9 +62,14 @@ def execute_tool(name: str, arguments: dict) -> dict:
         return error_result
 
 
-def run_agent(user_message: str) -> dict:
+def run_agent(user_message: str, conversation_history: list[dict] = None) -> dict:
     """
     Run the agent loop: LLM decides tools → execute → return results → repeat.
+
+    Args:
+        user_message: The current user query (may be a simple message or formatted conversation)
+        conversation_history: Optional list of parsed message dicts with metadata
+                            (username, role_tag, original_timestamp)
 
     Returns dict with 'response' (final text) and 'tool_results' (list of tool executions).
     """
@@ -77,10 +82,22 @@ def run_agent(user_message: str) -> dict:
     conversation_id = str(uuid.uuid4())
     start_time = datetime.now()
 
+    # Build initial messages list
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT, "timestamp": start_time.isoformat()},
-        {"role": "user", "content": user_message, "timestamp": start_time.isoformat()}
+        {"role": "system", "content": SYSTEM_PROMPT, "timestamp": start_time.isoformat()}
     ]
+
+    # If we have parsed conversation history, add those messages first
+    if conversation_history:
+        logger.info(f"📚 Including {len(conversation_history)} messages from conversation history")
+        messages.extend(conversation_history)
+    else:
+        # No parsed history - use the formatted message string
+        messages.append({
+            "role": "user",
+            "content": user_message,
+            "timestamp": start_time.isoformat()
+        })
 
     all_tool_results = []
     tool_usage = {}  # Track tool usage counts
