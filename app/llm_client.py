@@ -131,19 +131,30 @@ def _chat_bedrock(messages: list[dict], tools: list[dict] = None) -> dict:
     # Extract system message and convert messages to Bedrock format
     system = []
     bedrock_messages = []
-    for msg in messages:
+    i = 0
+    while i < len(messages):
+        msg = messages[i]
+
         if msg["role"] == "system":
             system.append({"text": msg["content"]})
+            i += 1
         elif msg["role"] == "tool":
-            # Bedrock expects tool results as user messages with toolResult content
+            # Group consecutive tool messages into a single user message
+            # Bedrock requires all tool results in one user message
+            tool_results = []
+            while i < len(messages) and messages[i]["role"] == "tool":
+                tool_msg = messages[i]
+                tool_results.append({
+                    "toolResult": {
+                        "toolUseId": tool_msg.get("tool_call_id", "unknown"),
+                        "content": [{"text": tool_msg.get("content", "{}")}]
+                    }
+                })
+                i += 1
+
             bedrock_messages.append({
                 "role": "user",
-                "content": [{
-                    "toolResult": {
-                        "toolUseId": msg.get("tool_call_id", "unknown"),
-                        "content": [{"text": msg["content"]}]
-                    }
-                }]
+                "content": tool_results
             })
         elif msg["role"] == "assistant" and msg.get("tool_calls"):
             # Assistant message with tool calls
@@ -159,11 +170,13 @@ def _chat_bedrock(messages: list[dict], tools: list[dict] = None) -> dict:
                     }
                 })
             bedrock_messages.append({"role": "assistant", "content": content})
+            i += 1
         else:
             bedrock_messages.append({
                 "role": msg["role"],
-                "content": [{"text": msg.get("content", "") or ""}]
+                "content": [{"text": msg.get("content", "") or " "}]
             })
+            i += 1
     
     params = {
         "modelId": config.LLM_MODEL,
