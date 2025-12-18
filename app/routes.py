@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app
 import re
 import json
+from datetime import datetime
 
 bp = Blueprint('api', __name__)
 
@@ -12,17 +13,89 @@ def log_request():
         current_app.logger.debug(f"Payload keys: {list(request.get_json().keys())}")
 
 
-def extract_conversation(messages: list[dict]) -> str:
+def parse_conversation_messages(content: str) -> list[dict]:
+    """
+    Parse formatted conversation text into individual message objects.
+
+    Recognizes patterns like:
+    [username (role) at timestamp]:
+    message content
+
+    [Assistant]:
+    response content
+
+    Returns list of message dicts with metadata extracted.
+    """
+    messages = []
+
+    # Pattern to match: [username (role) at ISO-timestamp]:
+    user_pattern = r'\[([^\]]+?)\s+\(([^\)]+)\)\s+at\s+([^\]]+)\]:\s*'
+    # Pattern to match: [Assistant]:
+    assistant_pattern = r'\[Assistant\]:\s*'
+
+    # Split content by message boundaries
+    # First, find all user message starts
+    user_matches = list(re.finditer(user_pattern, content))
+    assistant_matches = list(re.finditer(assistant_pattern, content))
+
+    # Combine and sort all match positions
+    all_matches = []
+    for match in user_matches:
+        all_matches.append(('user', match.start(), match.end(), match))
+    for match in assistant_matches:
+        all_matches.append(('assistant', match.start(), match.end(), match))
+
+    all_matches.sort(key=lambda x: x[1])  # Sort by start position
+
+    # Extract messages
+    for i, (role, start, end, match) in enumerate(all_matches):
+        # Find where this message ends (start of next message or end of string)
+        if i + 1 < len(all_matches):
+            content_end = all_matches[i + 1][1]
+        else:
+            content_end = len(content)
+
+        # Extract message content
+        message_content = content[end:content_end].strip()
+
+        if role == 'user':
+            # Extract username, role tag, and timestamp
+            username = match.group(1).strip()
+            role_tag = match.group(2).strip()
+            timestamp_str = match.group(3).strip()
+
+            messages.append({
+                'role': 'user',
+                'content': message_content,
+                'username': username,
+                'role_tag': role_tag,
+                'original_timestamp': timestamp_str,
+                'timestamp': datetime.now().isoformat()
+            })
+        elif role == 'assistant':
+            messages.append({
+                'role': 'assistant',
+                'content': message_content,
+                'timestamp': datetime.now().isoformat()
+            })
+
+    return messages
+
+
+def extract_conversation(messages: list[dict]) -> tuple[str, list[dict]]:
     """
     Extract the full conversation from all messages.
-    Returns a formatted string with context and conversation history.
+    Returns:
+        - A formatted string with context and conversation history (for backward compatibility)
+        - A list of parsed message objects with metadata
     """
     conversation_parts = []
-    
+    parsed_messages = []
+
     for msg in messages:
         role = msg.get('role', '')
         content = msg.get('content', '')
-        
+
         if role == 'system':
             # Include system context
             conversation_parts.append(f"[System Context]\n{content}")
@@ -35,13 +108,17 @@ def extract_conversation(messages: list[dict]) -> str:
                 conversation = re.sub(r'^The conversation follows:\s*', '', conversation, flags=re.IGNORECASE)
                 if conversation.strip():
                     conversation_parts.append(conversation.strip())
+                    # Try to parse into individual messages
+                    parsed_messages.extend(parse_conversation_messages(conversation))
             else:
-                # Regular message
+                # Regular message - try to parse it too
                 conversation_parts.append(content.strip())
+                parsed_messages.extend(parse_conversation_messages(content))
         elif role == 'assistant':
             conversation_parts.append(f"[Assistant]: {content}")
-    
-    return "\n\n".join(conversation_parts)
+
+    formatted_string = "\n\n".join(conversation_parts)
+    return formatted_string, parsed_messages
 
 
 @bp.route('/', methods=['POST'])
@@ -66,11 +143,13 @@ def query():
         return jsonify({"error": "No JSON data provided"}), 400
     
     messages = data.get('messages', [])
-    
-    # Extract full conversation with context
-    extracted_message = extract_conversation(messages)
+
+    # Extract full conversation with context and parse into individual messages
+    extracted_message, parsed_messages = extract_conversation(messages)
     current_app.logger.info(f"Extracted conversation:\n{extracted_message[:500]}...")
-    
+    if parsed_messages:
+        current_app.logger.info(f"📝 Parsed {len(parsed_messages)} individual messages from conversation history")
+
     # Run the agent
     from app.executor import run_agent
     import time
@@ -79,7 +158,8 @@ def query():
         current_app.logger.info("🚀 AGENT REQUEST")
         current_app.logger.info("=" * 60)
 
-        result = run_agent(extracted_message)
+        # Pass both the formatted string and parsed messages
+        result = run_agent(extracted_message, conversation_history=parsed_messages)
 
         current_app.logger.info("=" * 60)
         current_app.logger.info(f"✅ AGENT COMPLETE - {len(result['tool_results'])} tool(s) executed")
