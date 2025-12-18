@@ -118,14 +118,30 @@ def run_agent(user_message: str, conversation_history: list[dict] = None) -> dic
         for msg in messages:
             cleaned_msg = {
                 "role": msg["role"],
-                "content": msg.get("content", "")
             }
+
+            # Only include content if it exists and is not empty
+            content = msg.get("content", "")
+            if content:
+                cleaned_msg["content"] = content
+            elif msg["role"] != "tool":
+                # Non-tool messages should always have content, even if empty
+                # But make it a space to avoid Bedrock issues with empty strings
+                cleaned_msg["content"] = " "
+
             # Include tool-related fields if present
             if "tool_calls" in msg:
                 cleaned_msg["tool_calls"] = msg["tool_calls"]
             if "tool_call_id" in msg:
                 cleaned_msg["tool_call_id"] = msg["tool_call_id"]
+                # Tool messages must have content
+                if not cleaned_msg.get("content"):
+                    cleaned_msg["content"] = msg.get("content", "{}")
+
             cleaned_messages.append(cleaned_msg)
+
+        # Debug log for troubleshooting
+        logger.debug(f"Sending {len(cleaned_messages)} cleaned messages to LLM")
 
         # Call LLM with cleaned messages
         response = chat(cleaned_messages, tools=TOOL_SCHEMAS)
