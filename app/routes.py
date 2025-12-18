@@ -119,6 +119,21 @@ def extract_conversation(messages: list[dict]) -> tuple[str, list[dict]]:
                 parsed_messages.extend(parse_conversation_messages(content))
         elif role == 'assistant':
             conversation_parts.append(f"[Assistant]: {content}")
+            # Add assistant messages to parsed history
+            parsed_messages.append({
+                'role': 'assistant',
+                'content': content,
+                'timestamp': datetime.now().isoformat()
+            })
+        elif role == 'tool':
+            # Also preserve tool messages in conversation history
+            conversation_parts.append(f"[Tool Result]: {content}")
+            parsed_messages.append({
+                'role': 'tool',
+                'content': content,
+                'tool_call_id': msg.get('tool_call_id'),
+                'timestamp': datetime.now().isoformat()
+            })
 
     formatted_string = "\n\n".join(conversation_parts)
     return formatted_string, parsed_messages
