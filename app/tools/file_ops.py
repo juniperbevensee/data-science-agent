@@ -177,7 +177,7 @@ def file_info(path: str) -> dict:
     full_path = resolve_path(path)
     if not os.path.exists(full_path):
         return {"success": False, "error": f"File not found: {path}"}
-    
+
     stat = os.stat(full_path)
     return {
         "success": True,
@@ -185,6 +185,76 @@ def file_info(path: str) -> dict:
         "size_bytes": stat.st_size,
         "is_file": os.path.isfile(full_path),
         "is_dir": os.path.isdir(full_path)
+    }
+
+
+def export_conversation(output_path: str, include_system: bool = False) -> dict:
+    """
+    Export the current conversation history to JSON file.
+
+    Saves all messages from the current agent execution including:
+    - User messages
+    - Assistant responses with tool calls
+    - Tool execution results
+    - Timestamps and metadata
+
+    Once exported, you can analyze the conversation using existing tools:
+    - convert_json_to_csv to convert messages to CSV
+    - value_counts to analyze message roles or tool usage
+    - text_analysis tools to analyze message content
+    - plot_bar to visualize tool usage patterns
+
+    Args:
+        output_path: Path for JSON file (e.g. "conversation.json")
+        include_system: Whether to include system prompt (default False)
+    """
+    from app.executor import conversation_context
+    from datetime import datetime
+
+    # Check if conversation context is available
+    if not hasattr(conversation_context, 'messages'):
+        return {
+            "success": False,
+            "error": "No active conversation context. This tool must be called during an agent execution."
+        }
+
+    messages = conversation_context.messages
+
+    # Filter out system message if requested
+    if not include_system:
+        messages = [msg for msg in messages if msg.get("role") != "system"]
+
+    # Build conversation export with metadata
+    conversation_data = {
+        "conversation_id": conversation_context.conversation_id,
+        "start_time": conversation_context.start_time.isoformat(),
+        "export_time": datetime.now().isoformat(),
+        "iteration": conversation_context.iteration,
+        "message_count": len(messages),
+        "tool_usage": conversation_context.tool_usage,
+        "messages": messages
+    }
+
+    # Write to JSON file
+    full_path = resolve_path(output_path)
+    os.makedirs(os.path.dirname(full_path), exist_ok=True) if os.path.dirname(full_path) else None
+    with open(full_path, 'w') as f:
+        json.dump(conversation_data, f, indent=2)
+
+    # Generate summary
+    role_counts = {}
+    for msg in messages:
+        role = msg.get("role", "unknown")
+        role_counts[role] = role_counts.get(role, 0) + 1
+
+    return {
+        "success": True,
+        "path": output_path,
+        "conversation_id": conversation_context.conversation_id,
+        "messages_exported": len(messages),
+        "role_breakdown": role_counts,
+        "tools_used": conversation_context.tool_usage,
+        "message": f"Exported {len(messages)} messages. Use convert_json_to_csv with extract_path='messages' to analyze the conversation data."
     }
 
 
@@ -305,6 +375,21 @@ TOOL_SCHEMAS = [
                 "required": ["path"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "export_conversation",
+            "description": "Export the current conversation history to JSON file with full metadata. Includes all messages (user, assistant, tool results), timestamps, tool usage stats, and conversation ID. Once exported, use convert_json_to_csv and analytics tools to analyze conversation patterns.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "output_path": {"type": "string", "description": "Path for JSON file (e.g. 'conversation.json')"},
+                    "include_system": {"type": "boolean", "description": "Whether to include system prompt in export (default false)", "default": False}
+                },
+                "required": ["output_path"]
+            }
+        }
     }
 ]
 
@@ -318,6 +403,7 @@ TOOLS = {
     "copy_file": copy_file,
     "list_files": list_files,
     "file_info": file_info,
+    "export_conversation": export_conversation,
 }
 
 

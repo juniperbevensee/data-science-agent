@@ -1,7 +1,14 @@
 import json
+import threading
+import uuid
+from datetime import datetime
 from app.llm_client import chat, get_response_content, get_tool_calls
 from app.tools import TOOLS, TOOL_SCHEMAS
 from app.sandbox import SandboxError
+
+# Thread-local storage for conversation context
+# This allows tools to access the current conversation state
+conversation_context = threading.local()
 
 SYSTEM_PROMPT = """You are a data science assistant with access to tools for file operations and data analysis.
 You work within a sandboxed workspace directory. All file paths are relative to this workspace.
@@ -14,6 +21,7 @@ CRITICAL RULES:
 5. If you need to analyze text, use text analysis tools (word_frequency, sentiment_analysis, topic_extraction)
 6. If you need statistics, use summary_stats, correlation_matrix, or value_counts
 7. ALL file paths must be relative to workspace (e.g. "data.csv" not "artefacts/data.csv")
+8. You can export your own conversation history using export_conversation, then analyze it as data
 
 When the user asks you to perform data tasks, use the available tools. Always explain what you're doing.
 If a task requires multiple steps, execute them one at a time."""
@@ -65,19 +73,32 @@ def run_agent(user_message: str) -> dict:
 
     logger.info(f"🤖 Starting agent for query: {user_message[:100]}...")
 
+    # Initialize conversation context for this execution
+    conversation_id = str(uuid.uuid4())
+    start_time = datetime.now()
+
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_message}
+        {"role": "system", "content": SYSTEM_PROMPT, "timestamp": start_time.isoformat()},
+        {"role": "user", "content": user_message, "timestamp": start_time.isoformat()}
     ]
 
     all_tool_results = []
+    tool_usage = {}  # Track tool usage counts
 
     for iteration in range(MAX_ITERATIONS):
         logger.info(f"📍 Iteration {iteration + 1}/{MAX_ITERATIONS}")
 
+        # Update conversation context (accessible to tools)
+        conversation_context.messages = messages
+        conversation_context.conversation_id = conversation_id
+        conversation_context.start_time = start_time
+        conversation_context.iteration = iteration + 1
+        conversation_context.tool_usage = tool_usage
+
         # Call LLM
         response = chat(messages, tools=TOOL_SCHEMAS)
         assistant_message = response["choices"][0]["message"]
+        assistant_message["timestamp"] = datetime.now().isoformat()
 
         # Check for tool calls
         tool_calls = assistant_message.get("tool_calls", [])
@@ -86,6 +107,10 @@ def run_agent(user_message: str) -> dict:
             # No tools called, we're done
             final_response = assistant_message.get("content", "")
             logger.info(f"✅ Agent finished. Response: {final_response[:200]}...")
+
+            # Add final assistant message
+            messages.append(assistant_message)
+
             return {
                 "response": final_response,
                 "tool_results": all_tool_results
@@ -108,11 +133,16 @@ def run_agent(user_message: str) -> dict:
                 "result": result
             })
 
-            # Add tool result to messages
+            # Track tool usage
+            tool_usage[func_name] = tool_usage.get(func_name, 0) + 1
+
+            # Add tool result to messages with timestamp
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call["id"],
-                "content": json.dumps(result)
+                "tool_name": func_name,  # Add tool name for easier analysis
+                "content": json.dumps(result),
+                "timestamp": datetime.now().isoformat()
             })
 
     # Max iterations reached
