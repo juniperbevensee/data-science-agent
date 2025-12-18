@@ -54,6 +54,14 @@ Comprehensive qualitative data analysis tools:
 - Browse workspace directory
 - Get file information
 
+### 🔄 Conversation Export & Self-Analysis
+The agent can export and analyze its own conversation history as data:
+- **Export conversation** - Save message history to JSON with full metadata
+- **Timestamps** - ISO timestamps on all messages for temporal analysis
+- **Tool tracking** - Complete tool usage statistics and call counts
+- **Metadata** - Conversation ID, iteration count, role breakdown
+- **Self-analysis** - Use analytics tools to study agent behavior patterns
+
 ## Installation
 
 ### Prerequisites
@@ -141,6 +149,12 @@ curl -X POST http://localhost:5000/query \
 - "Fill missing values in revenue column with the mean"
 - "Create a new column 'profit' as revenue minus cost"
 
+**Conversation Analysis:**
+- "Export our conversation to conversation.json"
+- "Export the conversation and analyze which tools I used most"
+- "Save this conversation and create a bar chart of message types"
+- "Export conversation history and analyze the sentiment of my messages"
+
 ## Architecture
 
 ### Components
@@ -153,11 +167,69 @@ curl -X POST http://localhost:5000/query \
 
 ### Tool Categories
 
-1. **File Operations** (`file_ops.py`) - File I/O and management
+1. **File Operations** (`file_ops.py`) - File I/O, management, and conversation export
 2. **Transforms** (`transforms.py`) - Data manipulation
 3. **Cleaning** (`cleaning.py`) - Data quality operations
 4. **Analytics** (`analytics.py`) - Statistical analysis and ML
 5. **Visualization** (`visualization.py`) - Charts and plots
+6. **Text Analysis** (`text_analysis.py`) - NLP and sentiment analysis
+
+### Conversation Export Feature
+
+The agent can export and analyze its own conversation history:
+
+**What gets exported:**
+- All messages (user, assistant, tool results)
+- ISO timestamps for each message
+- Tool usage statistics (which tools were called and how many times)
+- Conversation metadata (ID, start time, iteration count)
+
+**Example workflow:**
+```bash
+# Ask the agent to export and analyze the conversation
+curl -X POST http://localhost:5000/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Export our conversation and show me which tools were used most"}'
+```
+
+The agent will:
+1. Use `export_conversation` to save the conversation to JSON
+2. Use `convert_json_to_csv` to convert messages to CSV format
+3. Use `value_counts` on the tool_name column to analyze tool usage
+4. Use `plot_bar` to create a visualization of tool frequency
+
+**Exported data structure:**
+```json
+{
+  "conversation_id": "uuid",
+  "start_time": "2025-12-18T12:00:00",
+  "export_time": "2025-12-18T12:05:00",
+  "iteration": 3,
+  "message_count": 12,
+  "tool_usage": {"read_csv": 2, "value_counts": 1, "plot_bar": 1},
+  "messages": [
+    {
+      "role": "user",
+      "content": "Analyze sales.csv",
+      "timestamp": "2025-12-18T12:00:00"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_123",
+      "tool_name": "read_csv",
+      "content": "{...}",
+      "timestamp": "2025-12-18T12:00:01"
+    }
+  ]
+}
+```
+
+**Analysis possibilities:**
+- Tool usage patterns and frequencies
+- Message distribution by role (user/assistant/tool)
+- Temporal analysis using timestamps
+- Text analysis of user requests or assistant responses
+- Debugging agent behavior by examining tool call sequences
 
 ### Workspace Directory
 
