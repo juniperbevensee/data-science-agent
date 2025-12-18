@@ -85,15 +85,63 @@ def parse_conversation_messages(content: str) -> list[dict]:
     return messages
 
 
-def extract_conversation(messages: list[dict]) -> tuple[str, list[dict]]:
+def parse_conversation_metadata(content: str) -> dict:
+    """
+    Parse conversation context metadata from the header block.
+
+    Extracts fields like:
+    Biome: Example Project - Optional description
+    Biome ID: biome-abc123...
+    Thread: Conversation Name
+    Thread ID: thread-xyz789...
+    Participants: 6 members
+
+    Returns dict with extracted metadata fields.
+    """
+    metadata = {}
+
+    # Pattern to match "Field: Value" lines
+    field_pattern = r'^([^:]+):\s*(.+)$'
+
+    lines = content.split('\n')
+    for line in lines:
+        line = line.strip()
+        match = re.match(field_pattern, line)
+        if match:
+            field_name = match.group(1).strip()
+            field_value = match.group(2).strip()
+
+            if field_name == 'Biome':
+                # Split biome name and description (separated by ' - ')
+                if ' - ' in field_value:
+                    biome_parts = field_value.split(' - ', 1)
+                    metadata['biome_name'] = biome_parts[0].strip()
+                    metadata['biome_description'] = biome_parts[1].strip()
+                else:
+                    metadata['biome_name'] = field_value
+            elif field_name == 'Biome ID':
+                metadata['biome_id'] = field_value
+            elif field_name == 'Thread':
+                metadata['thread_name'] = field_value
+            elif field_name == 'Thread ID':
+                metadata['thread_id'] = field_value
+            elif field_name == 'Participants':
+                metadata['participants'] = field_value
+
+    return metadata
+
+
+def extract_conversation(messages: list[dict]) -> tuple[str, list[dict], dict]:
     """
     Extract the full conversation from all messages.
     Returns:
         - A formatted string with context and conversation history (for backward compatibility)
         - A list of parsed message objects with metadata
+        - A dict of conversation metadata (biome, thread, participants, etc.)
     """
     conversation_parts = []
     parsed_messages = []
+    conversation_metadata = {}
 
     for msg in messages:
         role = msg.get('role', '')
@@ -106,7 +154,17 @@ def extract_conversation(messages: list[dict]) -> tuple[str, list[dict]]:
             # Check if this contains the separator
             parts = re.split(r'={5,}', content)
             if len(parts) > 1:
-                # Has context header - extract conversation part
+                # Has context header - extract metadata and conversation
+                context_header = parts[0] if len(parts) > 0 else ""
+
+                # Parse metadata from context header
+                if context_header.strip():
+                    metadata = parse_conversation_metadata(context_header)
+                    if metadata:
+                        conversation_metadata.update(metadata)
+                        current_app.logger.info(f"📋 Extracted conversation metadata: {metadata}")
+
+                # Extract conversation part
                 conversation = parts[-1].strip()
                 conversation = re.sub(r'^The conversation follows:\s*', '', conversation, flags=re.IGNORECASE)
                 if conversation.strip():
@@ -136,7 +194,7 @@ def extract_conversation(messages: list[dict]) -> tuple[str, list[dict]]:
             })
 
     formatted_string = "\n\n".join(conversation_parts)
-    return formatted_string, parsed_messages
+    return formatted_string, parsed_messages, conversation_metadata
 
 
 @bp.route('/', methods=['POST'])
@@ -163,10 +221,12 @@ def query():
     messages = data.get('messages', [])
 
     # Extract full conversation with context and parse into individual messages
-    extracted_message, parsed_messages = extract_conversation(messages)
+    extracted_message, parsed_messages, conversation_metadata = extract_conversation(messages)
     current_app.logger.info(f"Extracted conversation:\n{extracted_message[:500]}...")
     if parsed_messages:
         current_app.logger.info(f"📝 Parsed {len(parsed_messages)} individual messages from conversation history")
+    if conversation_metadata:
+        current_app.logger.info(f"📋 Conversation metadata: {conversation_metadata}")
 
     # Run the agent with full conversation history
     # The SYSTEM_PROMPT instructs the agent to use history for CONTEXT only
@@ -182,10 +242,18 @@ def query():
         # System prompt rules 9-13 prevent re-execution of historical tasks
         if parsed_messages:
             current_app.logger.info(f"📜 Sending {len(parsed_messages)} messages as conversation context")
-            result = run_agent(extracted_message, conversation_history=parsed_messages)
+            result = run_agent(
+                extracted_message,
+                conversation_history=parsed_messages,
+                conversation_metadata=conversation_metadata
+            )
         else:
             # No parsed history - just send the message
-            result = run_agent(extracted_message, conversation_history=None)
+            result = run_agent(
+                extracted_message,
+                conversation_history=None,
+                conversation_metadata=conversation_metadata
+            )
 
         current_app.logger.info("=" * 60)
         current_app.logger.info(f"✅ AGENT COMPLETE - {len(result['tool_results'])} tool(s) executed")

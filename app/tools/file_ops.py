@@ -235,6 +235,10 @@ def export_conversation(output_path: str, include_system: bool = False) -> dict:
         "messages": messages
     }
 
+    # Include conversation context metadata if available
+    if hasattr(conversation_context, 'metadata') and conversation_context.metadata:
+        conversation_data["metadata"] = conversation_context.metadata
+
     # Write to JSON file
     full_path = resolve_path(output_path)
     os.makedirs(os.path.dirname(full_path), exist_ok=True) if os.path.dirname(full_path) else None
