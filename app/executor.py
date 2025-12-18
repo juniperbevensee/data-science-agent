@@ -23,6 +23,13 @@ CRITICAL RULES:
 7. ALL file paths must be relative to workspace (e.g. "data.csv" not "artefacts/data.csv")
 8. You can export your own conversation history using export_conversation, then analyze it as data
 
+CONVERSATION HISTORY RULES:
+9. Previous messages in the conversation are READ-ONLY CONTEXT - they show what was already done
+10. ONLY execute tasks from the LATEST user message - do NOT repeat tasks from earlier messages
+11. Use historical messages to understand context (what files exist, what data is being discussed)
+12. If the latest request refers to "the data" or "that file", use conversation history to identify it
+13. DO NOT re-execute file creation, data processing, or analysis from previous messages
+
 When the user asks you to perform data tasks, use the available tools. Always explain what you're doing.
 If a task requires multiple steps, execute them one at a time."""
 

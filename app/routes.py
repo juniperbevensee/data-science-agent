@@ -153,7 +153,9 @@ def query():
     if parsed_messages:
         current_app.logger.info(f"📝 Parsed {len(parsed_messages)} individual messages from conversation history")
 
-    # Run the agent
+    # Run the agent with full conversation history
+    # The SYSTEM_PROMPT instructs the agent to use history for CONTEXT only
+    # and to execute tasks ONLY from the latest user message
     from app.executor import run_agent
     import time
     try:
@@ -161,8 +163,14 @@ def query():
         current_app.logger.info("🚀 AGENT REQUEST")
         current_app.logger.info("=" * 60)
 
-        # Pass both the formatted string and parsed messages
-        result = run_agent(extracted_message, conversation_history=parsed_messages)
+        # Pass full conversation history for context
+        # System prompt rules 9-13 prevent re-execution of historical tasks
+        if parsed_messages:
+            current_app.logger.info(f"📜 Sending {len(parsed_messages)} messages as conversation context")
+            result = run_agent(extracted_message, conversation_history=parsed_messages)
+        else:
+            # No parsed history - just send the message
+            result = run_agent(extracted_message, conversation_history=None)
 
         current_app.logger.info("=" * 60)
         current_app.logger.info(f"✅ AGENT COMPLETE - {len(result['tool_results'])} tool(s) executed")
