@@ -69,7 +69,11 @@ def execute_tool(name: str, arguments: dict) -> dict:
         return error_result
 
 
-def run_agent(user_message: str, conversation_history: list[dict] = None) -> dict:
+def run_agent(
+    user_message: str,
+    conversation_history: list[dict] = None,
+    conversation_metadata: dict = None
+) -> dict:
     """
     Run the agent loop: LLM decides tools → execute → return results → repeat.
 
@@ -77,6 +81,8 @@ def run_agent(user_message: str, conversation_history: list[dict] = None) -> dic
         user_message: The current user query (may be a simple message or formatted conversation)
         conversation_history: Optional list of parsed message dicts with metadata
                             (username, role_tag, original_timestamp)
+        conversation_metadata: Optional dict with conversation context metadata
+                             (biome_name, biome_id, thread_name, thread_id, participants)
 
     Returns dict with 'response' (final text) and 'tool_results' (list of tool executions).
     """
@@ -88,6 +94,10 @@ def run_agent(user_message: str, conversation_history: list[dict] = None) -> dic
     # Initialize conversation context for this execution
     conversation_id = str(uuid.uuid4())
     start_time = datetime.now()
+
+    # Store conversation metadata if provided
+    if conversation_metadata is None:
+        conversation_metadata = {}
 
     # Build initial messages list
     messages = [
@@ -118,6 +128,7 @@ def run_agent(user_message: str, conversation_history: list[dict] = None) -> dic
         conversation_context.start_time = start_time
         conversation_context.iteration = iteration + 1
         conversation_context.tool_usage = tool_usage
+        conversation_context.metadata = conversation_metadata
 
         # Clean messages for LLM: remove metadata fields, keep only standard fields
         # This prevents issues with extra fields like username, role_tag, original_timestamp
