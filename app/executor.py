@@ -112,8 +112,23 @@ def run_agent(user_message: str, conversation_history: list[dict] = None) -> dic
         conversation_context.iteration = iteration + 1
         conversation_context.tool_usage = tool_usage
 
-        # Call LLM
-        response = chat(messages, tools=TOOL_SCHEMAS)
+        # Clean messages for LLM: remove metadata fields, keep only standard fields
+        # This prevents issues with extra fields like username, role_tag, original_timestamp
+        cleaned_messages = []
+        for msg in messages:
+            cleaned_msg = {
+                "role": msg["role"],
+                "content": msg.get("content", "")
+            }
+            # Include tool-related fields if present
+            if "tool_calls" in msg:
+                cleaned_msg["tool_calls"] = msg["tool_calls"]
+            if "tool_call_id" in msg:
+                cleaned_msg["tool_call_id"] = msg["tool_call_id"]
+            cleaned_messages.append(cleaned_msg)
+
+        # Call LLM with cleaned messages
+        response = chat(cleaned_messages, tools=TOOL_SCHEMAS)
         assistant_message = response["choices"][0]["message"]
         assistant_message["timestamp"] = datetime.now().isoformat()
 

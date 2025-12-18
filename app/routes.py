@@ -73,10 +73,13 @@ def parse_conversation_messages(content: str) -> list[dict]:
                 'timestamp': datetime.now().isoformat()
             })
         elif role == 'assistant':
+            # Historical assistant messages are TEXT ONLY - no tool_calls
+            # (we don't have the tool results, and don't want to re-execute)
             messages.append({
                 'role': 'assistant',
                 'content': message_content,
                 'timestamp': datetime.now().isoformat()
+                # Explicitly NO tool_calls - this is just conversational context
             })
 
     return messages
